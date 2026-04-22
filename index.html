@@ -520,6 +520,7 @@ function align() {
       }
     }
 
+    kor = syncTimestamps(eng, kor);
     korBox.value = kor.join('\n');
     renderPreview(korBox, korPreview);
     setStatus('줄 맞춤 완료', `빈 줄 추가 ${inserted}회, 줄 병합 ${merged}회 처리했습니다. 아래 구분선 미리보기에서 번호 위 가로줄을 기준으로 정렬 상태를 확인하세요.`);
@@ -551,8 +552,25 @@ function cleanKoreanText(text) {
 }
 
 function copyClean() {
-  navigator.clipboard.writeText(cleanKoreanText(korBox.value));
-  setStatus('복사 완료', '한국어 자막을 정리해서 클립보드에 복사했습니다.');
+  let lines = korBox.value.split('\n');
+
+  // WEBVTT 제거
+  if (lines[0].trim().toUpperCase().includes("WEBVTT")) {
+    lines.shift();
+  }
+
+  // 빈 줄 제거 (위쪽)
+  while (lines.length && lines[0].trim() === '') {
+    lines.shift();
+  }
+
+  // KOREAN 추가
+  lines.unshift("KOREAN");
+
+  const result = lines.join('\n');
+
+  navigator.clipboard.writeText(result);
+  alert("복사 완료 (KOREAN 포함)");
 }
 
 function downloadResult() {
@@ -577,6 +595,18 @@ function clearAll() {
   setStatus('초기화 완료', '입력과 미리보기를 모두 비웠습니다.');
 }
 
+function syncTimestamps(engLines, korLines) {
+  const isTimestamp = (line) => /\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}/.test(line);
+
+  for (let i = 0; i < engLines.length; i++) {
+    if (isTimestamp(engLines[i]) && isTimestamp(korLines[i])) {
+      // 영문 포맷 그대로 복사
+      korLines[i] = engLines[i];
+    }
+  }
+  return korLines;
+}
+  
 renderPreview(engBox, engPreview);
 renderPreview(korBox, korPreview);
 </script>
