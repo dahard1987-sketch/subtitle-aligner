@@ -261,13 +261,13 @@ textarea.dragover {
 <div class="wrap">
   <div class="header-card">
     <h1>자막 줄 맞춤 도구</h1>
-    <p class="desc">텍스트 박스에 파일을 직접 드롭하거나 붙여넣을 수 있고, 버튼으로도 영문/한국어 VTT를 불러올 수 있습니다.</p>
+    <p class="desc">텍스트 박스에 파일을 직접 드롭하거나 붙여넣을 수 있고, 버튼으로도 영문/한국어 VTT 또는 SRT를 불러올 수 있습니다.</p>
 
     <div class="toolbar">
-      <label class="file-label" for="engFile">영문 VTT 열기</label>
+      <label class="file-label" for="engFile">영문 자막 열기</label>
       <input id="engFile" type="file" accept=".vtt,.srt,.txt">
 
-      <label class="file-label" for="korFile">한국어 VTT 열기</label>
+      <label class="file-label" for="korFile">한국어 자막 열기</label>
       <input id="korFile" type="file" accept=".vtt,.srt,.txt">
 
       <button class="primary" onclick="align()">줄 맞추기</button>
@@ -329,6 +329,8 @@ const statusTitle = document.getElementById('statusTitle');
 const statusText = document.getElementById('statusText');
 const engFile = document.getElementById('engFile');
 const korFile = document.getElementById('korFile');
+let englishSourceName = '';
+let koreanSourceName = '';
 
 function setStatus(title, text, isError = false) {
   statusTitle.textContent = title;
@@ -346,6 +348,32 @@ function readFile(file) {
     reader.onerror = () => reject(new Error('파일을 읽지 못했습니다.'));
     reader.readAsText(file, 'utf-8');
   });
+}
+
+function detectSubtitleFormat(text, fileName = '') {
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith('.srt')) return 'srt';
+  if (lowerName.endsWith('.vtt')) return 'vtt';
+
+  const lines = normalizeLines(text);
+  const firstContentLine = lines.find(line => line.trim() !== '') || '';
+  if (firstContentLine.trim().toUpperCase().startsWith('WEBVTT')) return 'vtt';
+
+  const hasSrtStyleTimestamp = lines.some(line =>
+    /\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}/.test(line)
+  );
+  if (hasSrtStyleTimestamp) return 'srt';
+
+  const hasVttStyleTimestamp = lines.some(line =>
+    /\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}/.test(line)
+  );
+  if (hasVttStyleTimestamp) return 'vtt';
+
+  return '';
+}
+
+function formatLabel(format) {
+  return format ? format.toUpperCase() : '자막';
 }
 
 function attachTextareaDrop(el, onLoaded) {
@@ -370,24 +398,28 @@ function attachTextareaDrop(el, onLoaded) {
 
 function setEnglishText(text, fileName = null) {
   engBox.value = text;
-  if (fileName) engMeta.textContent = `영문 파일: ${fileName}`;
+  if (fileName) englishSourceName = fileName;
+  const format = detectSubtitleFormat(text, englishSourceName);
+  if (englishSourceName) engMeta.textContent = `영문 파일: ${englishSourceName} (${formatLabel(format)})`;
   renderPreview(engBox, engPreview);
 }
 
 function setKoreanText(text, fileName = null) {
   korBox.value = text;
-  if (fileName) korMeta.textContent = `한국어 파일: ${fileName}`;
+  if (fileName) koreanSourceName = fileName;
+  const format = detectSubtitleFormat(text, koreanSourceName);
+  if (koreanSourceName) korMeta.textContent = `한국어 파일: ${koreanSourceName} (${formatLabel(format)})`;
   renderPreview(korBox, korPreview);
 }
 
 attachTextareaDrop(engBox, (text, fileName) => {
   setEnglishText(text, fileName);
-  setStatus('영문 파일을 불러왔습니다.', '영문 텍스트 박스에 직접 드롭하여 파일을 불러왔습니다.');
+  setStatus('영문 파일을 불러왔습니다.', `${formatLabel(detectSubtitleFormat(text, fileName))} 형식 영문 자막을 직접 드롭하여 불러왔습니다.`);
 });
 
 attachTextareaDrop(korBox, (text, fileName) => {
   setKoreanText(text, fileName);
-  setStatus('한국어 파일을 불러왔습니다.', '한국어 텍스트 박스에 직접 드롭하여 파일을 불러왔습니다.');
+  setStatus('한국어 파일을 불러왔습니다.', `${formatLabel(detectSubtitleFormat(text, fileName))} 형식 한국어 자막을 직접 드롭하여 불러왔습니다.`);
 });
 
 engFile.addEventListener('change', async e => {
@@ -395,7 +427,7 @@ engFile.addEventListener('change', async e => {
   if (!file) return;
   const text = await readFile(file);
   setEnglishText(text, file.name);
-  setStatus('영문 파일을 불러왔습니다.', '버튼으로 영문 파일을 불러왔습니다.');
+  setStatus('영문 파일을 불러왔습니다.', `${formatLabel(detectSubtitleFormat(text, file.name))} 형식 영문 자막을 버튼으로 불러왔습니다.`);
 });
 
 korFile.addEventListener('change', async e => {
@@ -403,7 +435,7 @@ korFile.addEventListener('change', async e => {
   if (!file) return;
   const text = await readFile(file);
   setKoreanText(text, file.name);
-  setStatus('한국어 파일을 불러왔습니다.', '버튼으로 한국어 파일을 불러왔습니다.');
+  setStatus('한국어 파일을 불러왔습니다.', `${formatLabel(detectSubtitleFormat(text, file.name))} 형식 한국어 자막을 버튼으로 불러왔습니다.`);
 });
 
 function escapeHtml(text) {
@@ -574,13 +606,17 @@ function copyClean() {
 }
 
 function downloadResult() {
+  const resultFormat =
+    detectSubtitleFormat(korBox.value, koreanSourceName) ||
+    detectSubtitleFormat(engBox.value, englishSourceName) ||
+    'vtt';
   const blob = new Blob([korBox.value], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'korean_aligned.vtt';
+  a.download = `korean_aligned.${resultFormat}`;
   a.click();
   URL.revokeObjectURL(a.href);
-  setStatus('저장 완료', '브라우저 다운로드로 결과 파일을 저장했습니다.');
+  setStatus('저장 완료', `${resultFormat.toUpperCase()} 결과 파일을 브라우저 다운로드로 저장했습니다.`);
 }
 
 function clearAll() {
@@ -590,6 +626,8 @@ function clearAll() {
   korPreview.innerHTML = '';
   engMeta.textContent = '영문 파일: 선택 안 됨';
   korMeta.textContent = '한국어 파일: 선택 안 됨';
+  englishSourceName = '';
+  koreanSourceName = '';
   engFile.value = '';
   korFile.value = '';
   setStatus('초기화 완료', '입력과 미리보기를 모두 비웠습니다.');
